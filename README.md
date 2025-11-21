@@ -18,6 +18,5 @@ Proyek ini bertujuan untuk mengoptimalkan strategi pemasaran sebuah perusahaan r
 3. **Prime Time:** Transaksi tertinggi terjadi pada hari **Kamis**, terendah pada **Sabtu**.
 
 ## 📈 Visuals
-
+[🔗 View Live Dashboard](https://rrfm-customer-segmentation.streamlit.app/)
 ![Dashboard Preview](Preview.png)
-🔗 [Live Dashboard](https://rrfm-customer-segmentation.streamlit.app/)
