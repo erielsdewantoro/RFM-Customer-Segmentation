@@ -29,28 +29,23 @@ st.markdown("""
     div[data-testid="metric-container"] > div:nth-child(2) {
         color: #0068C9; font-size: 24px; font-weight: bold;
     }
-    /* Tab Header Style */
-    .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
-        font-size: 16px; font-weight: 600;
-    }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. DATA LOADING
+# 2. DATA LOADING (DENGAN PAKSA FORMAT)
 # ==========================================
 @st.cache_data
 def load_data():
     rfm = pd.read_csv('clean_rfm_segments.csv')
     trx = pd.read_csv('clean_transactions_full.csv')
     
-    # Feature Engineering untuk App
+    # Feature Engineering (Dihitung ulang agar format 100% konsisten)
     trx['DateTime'] = pd.to_datetime(trx['DateTime'])
-    # Pastikan kolom sorting ada
-    if 'DayOfWeek_Sorted' not in trx.columns:
-        trx['DayOfWeek_Sorted'] = (trx['DateTime'].dt.dayofweek + 1).astype(str) + ". " + trx['DateTime'].dt.day_name()
-    if 'Hour_Sorted' not in trx.columns:
-        trx['Hour_Sorted'] = trx['DateTime'].dt.hour.astype(str).str.zfill(2) + ":00"
+    
+    # PAKSA FORMAT HARI & JAM (Agar sesuai dengan Hardcode Order)
+    trx['DayOfWeek_Sorted'] = (trx['DateTime'].dt.dayofweek + 1).astype(str) + ". " + trx['DateTime'].dt.day_name()
+    trx['Hour_Sorted'] = trx['DateTime'].dt.hour.astype(str).str.zfill(2) + ":00"
         
     return rfm, trx
 
@@ -59,6 +54,11 @@ try:
 except FileNotFoundError:
     st.error("⚠️ File CSV tidak ditemukan. Upload 'clean_rfm_segments.csv' & 'clean_transactions_full.csv' ke GitHub.")
     st.stop()
+
+# DEFINE ORDER LIST (URUTAN BAKU)
+# Ini kunci agar heatmap tidak pernah berantakan lagi
+DAYS_ORDER = ["1. Monday", "2. Tuesday", "3. Wednesday", "4. Thursday", "5. Friday", "6. Saturday", "7. Sunday"]
+HOURS_ORDER = [f"{i:02d}:00" for i in range(24)]
 
 # ==========================================
 # 3. SIDEBAR NAVIGATION
@@ -73,11 +73,10 @@ page = st.sidebar.radio("Menu Navigasi:",
 st.sidebar.divider()
 
 # ==========================================
-# HALAMAN 1: DASHBOARD UTAMA (MONITORING)
+# HALAMAN 1: DASHBOARD UTAMA
 # ==========================================
 if page == "📊 Dashboard Utama":
     
-    # --- SIDEBAR FILTERS (Hanya di hal ini) ---
     st.sidebar.header("🎛️ Filter Dashboard")
     sel_seg = st.sidebar.multiselect("Segmen:", rfm_df['Segment'].unique(), default=rfm_df['Segment'].unique())
     min_d, max_d = trx_df['DateTime'].min().date(), trx_df['DateTime'].max().date()
@@ -97,10 +96,8 @@ if page == "📊 Dashboard Utama":
     else:
         f_trx = trx_df[trx_df['User_id'].isin(valid_users)]
 
-    # --- MAIN CONTENT ---
     st.title("🚀 Business Performance Monitor")
     
-    # KPI CARDS
     c1, c2, c3, c4 = st.columns(4)
     rev = f_trx['Total Price'].sum()
     trx_count = f_trx['Session_id'].nunique()
@@ -131,9 +128,14 @@ if page == "📊 Dashboard Utama":
             st.subheader("Heatmap Waktu Transaksi")
             if not f_trx.empty:
                 hm = f_trx.groupby(['DayOfWeek_Sorted', 'Hour_Sorted']).size().reset_index(name='Count')
-                fig_h = px.density_heatmap(hm, x='Hour_Sorted', y='DayOfWeek_Sorted', z='Count', color_continuous_scale='Blues')
-                fig_h.update_xaxes(categoryorder='category ascending', title="Jam")
-                fig_h.update_yaxes(categoryorder='category ascending', title="Hari")
+                
+                fig_h = px.density_heatmap(hm, x='Hour_Sorted', y='DayOfWeek_Sorted', z='Count', 
+                                           color_continuous_scale='Blues', text_auto=True)
+                
+                # --- FIX UTAMA: HARDCODE SORTING ORDER ---
+                fig_h.update_xaxes(categoryorder='array', categoryarray=HOURS_ORDER, title="Jam")
+                fig_h.update_yaxes(categoryorder='array', categoryarray=DAYS_ORDER, title="Hari")
+                
                 st.plotly_chart(fig_h, use_container_width=True)
             else:
                 st.info("No Data")
@@ -166,112 +168,89 @@ if page == "📊 Dashboard Utama":
             }, use_container_width=True, hide_index=True)
 
 # ==========================================
-# HALAMAN 2: MARKETING ACTION CENTER (NEW!)
+# HALAMAN 2: MARKETING ACTION CENTER
 # ==========================================
 elif page == "🛠️ Marketing Action Center":
     st.title("🛠️ Marketing Action Center")
-    st.markdown("Tools taktis untuk tim Sales & Marketing melakukan eksekusi kampanye.")
-
-    # --- FITUR 1: PRODUCT ANALYZER ---
+    
     st.markdown("---")
     st.header("1️⃣ Product Deep Dive")
-    st.caption("Analisis performa spesifik per produk untuk menentukan waktu promo terbaik.")
     
     col_sel, col_stat = st.columns([1, 3])
+    all_prods = sorted(trx_df['SubCategory'].unique())
     
     with col_sel:
-        # Dropdown pilih produk
-        all_prods = sorted(trx_df['SubCategory'].unique())
-        selected_prod = st.selectbox("Pilih Produk / Kategori:", all_prods)
+        selected_prod = st.selectbox("Pilih Produk:", all_prods)
     
-    # Filter data by product
     prod_trx = trx_df[trx_df['SubCategory'] == selected_prod]
     
     with col_stat:
-        # Mini KPI Produk
         rev_p = prod_trx['Total Price'].sum()
         qty_p = prod_trx['Quantity'].sum()
-        k1, k2, k3 = st.columns(3)
+        k1, k2 = st.columns(2)
         k1.metric(f"Revenue: {selected_prod}", f"Rp {rev_p:,.0f}".replace(",", "."))
         k2.metric("Terjual (Qty)", f"{qty_p:,.0f}")
     
-    # Visualisasi Produk
     c1, c2 = st.columns(2)
-    
     with c1:
         st.subheader(f"Kapan {selected_prod} Laris?")
-        # Heatmap KHUSUS Produk ini
         if not prod_trx.empty:
             hm_prod = prod_trx.groupby(['DayOfWeek_Sorted', 'Hour_Sorted']).size().reset_index(name='Count')
             fig_hm_p = px.density_heatmap(hm_prod, x='Hour_Sorted', y='DayOfWeek_Sorted', z='Count', 
-                                          color_continuous_scale='Oranges', title=f"Heatmap Penjualan: {selected_prod}")
-            fig_hm_p.update_xaxes(categoryorder='category ascending')
-            fig_hm_p.update_yaxes(categoryorder='category ascending')
+                                          color_continuous_scale='Oranges', title=f"Heatmap: {selected_prod}")
+            
+            # --- FIX UTAMA: HARDCODE SORTING ORDER JUGA DI SINI ---
+            fig_hm_p.update_xaxes(categoryorder='array', categoryarray=HOURS_ORDER)
+            fig_hm_p.update_yaxes(categoryorder='array', categoryarray=DAYS_ORDER)
+            
             st.plotly_chart(fig_hm_p, use_container_width=True)
-            st.info(f"💡 Gunakan Heatmap ini untuk menentukan kapan Flash Sale **{selected_prod}**.")
         else:
             st.warning("Data tidak cukup.")
             
     with c2:
-        st.subheader("Siapa Pembelinya?")
-        # Ambil User ID pembeli produk ini, lalu cek segmennya di RFM
+        st.subheader("Segmen Pembeli")
         buyer_ids = prod_trx['User_id'].unique()
         buyer_rfm = rfm_df[rfm_df['User_id'].isin(buyer_ids)]
-        
         seg_buy = buyer_rfm['Segment'].value_counts().reset_index()
         seg_buy.columns = ['Segment', 'Count']
-        fig_p_seg = px.bar(seg_buy, x='Count', y='Segment', orientation='h', color='Count', title=f"Segmen Pembeli {selected_prod}")
+        fig_p_seg = px.bar(seg_buy, x='Count', y='Segment', orientation='h', color='Count')
         st.plotly_chart(fig_p_seg, use_container_width=True)
 
-    # --- FITUR 2: TARGET AUDIENCE GENERATOR ---
     st.markdown("---")
     st.header("2️⃣ Campaign Target Generator")
-    st.caption("Filter user spesifik untuk di-download dan diserahkan ke tim CS/Sales.")
     
     col_f1, col_f2, col_f3 = st.columns(3)
-    
     with col_f1:
         target_seg = st.multiselect("Target Segmen:", rfm_df['Segment'].unique(), default=["At Risk"])
     with col_f2:
-        min_recency = st.number_input("Minimal Hari Tidak Belanja (Recency):", min_value=0, value=30)
+        min_recency = st.number_input("Min. Recency (Hari):", min_value=0, value=30)
     with col_f3:
-        min_monetary = st.number_input("Minimal Total Belanja (Rp):", min_value=0, value=50000)
+        min_monetary = st.number_input("Min. Belanja (Rp):", min_value=0, value=50000)
         
-    # Logic Filter
     target_list = rfm_df[
         (rfm_df['Segment'].isin(target_seg)) & 
         (rfm_df['Recency'] >= min_recency) &
         (rfm_df['Monetary'] >= min_monetary)
     ]
     
-    st.success(f"🎯 Ditemukan **{len(target_list)} Pelanggan** yang cocok dengan kriteria.")
+    st.success(f"🎯 Ditemukan **{len(target_list)} Pelanggan**.")
+    st.dataframe(target_list, use_container_width=True)
     
-    st.dataframe(target_list[['User_id', 'Segment', 'Recency', 'Monetary', 'Frequency']], use_container_width=True)
-    
-    # Download Button
     csv = target_list.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="📥 Download Data Target (CSV)",
-        data=csv,
-        file_name='campaign_target_list.csv',
-        mime='text/csv',
-    )
+    st.download_button("📥 Download CSV", data=csv, file_name='target_list.csv', mime='text/csv')
 
 # ==========================================
-# HALAMAN 3: BUSINESS RECOMMENDATIONS
+# HALAMAN 3 & 4 (Recommendation & Info)
 # ==========================================
 elif page == "💡 Rekomendasi Bisnis":
     st.title("💡 Rekomendasi Strategis")
     with st.expander("🏆 Strategi Champions", expanded=True):
-        st.write("**Action:** Berikan akses *Pre-order* eksklusif Gadget. **Goal:** Jaga Eksklusivitas.")
+        st.write("**Action:** Berikan akses *Pre-order* eksklusif Gadget.")
     with st.expander("⚠️ Strategi At Risk", expanded=True):
-        st.write("**Action:** Kirim Voucher pada jam sibuk sesuai Heatmap. **Goal:** Win-Back Campaign.")
+        st.write("**Action:** Kirim Voucher pada jam sibuk sesuai Heatmap.")
     with st.expander("🌱 Strategi New Customers", expanded=True):
-        st.write("**Action:** Tawarkan Bundling Beli 2 Hemat. **Goal:** Tingkatkan Frekuensi.")
+        st.write("**Action:** Tawarkan Bundling Beli 2 Hemat.")
 
-# ==========================================
-# HALAMAN 4: DATASET INFO
-# ==========================================
 elif page == "📂 Dataset Info":
     st.title("📂 Informasi Dataset")
     st.markdown("Sumber Data: E-Commerce Retail Transaction 2019.")
