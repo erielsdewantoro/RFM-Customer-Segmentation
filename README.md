@@ -4,7 +4,7 @@
 
 Proyek ini bertujuan untuk mengoptimalkan strategi pemasaran sebuah perusahaan ritel dengan melakukan segmentasi pelanggan. Menggunakan data transaksi historis, saya menerapkan metode **RFM (Recency, Frequency, Monetary)** untuk mengelompokkan pelanggan menjadi segmen actionable seperti _Champions_, _Loyal_, dan _At Risk_.
 
-🔗 **Live Dashboard (Streamlit):** [Link Streamlit Akan Muncul Disini Nanti]
+🔗 **Live Dashboard (Streamlit):** [https://rrfm-customer-segmentation.streamlit.app/]
 
 ## 📂 Dataset & Tools
 
@@ -19,10 +19,4 @@ Proyek ini bertujuan untuk mengoptimalkan strategi pemasaran sebuah perusahaan r
 
 ## 📈 Visuals
 
-_(Disini kamu bisa tempel screenshot Dashboard Power BI kamu)_
-
-## 🛠️ How to Run
-
-1. Clone repository ini.
-2. Install requirements: `pip install -r requirements.txt`
-3. Jalankan Streamlit: `streamlit run app.py`
+_(screenshot Dashboard Power BI kamu)_
