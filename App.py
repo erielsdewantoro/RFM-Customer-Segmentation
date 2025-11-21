@@ -4,41 +4,34 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 # ==========================================
-# 1. CONFIGURATION & CUSTOM CSS (THEMING)
+# 1. CONFIGURATION & CUSTOM CSS
 # ==========================================
 st.set_page_config(
-    page_title="Retail Analytics Dashboard",
-    page_icon="📊",
+    page_title="Retail Analytics Pro",
+    page_icon="🚀",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS untuk tampilan Card & Metric
 st.markdown("""
 <style>
-    /* Metric Card Style */
+    /* Styling Metric Card */
     div[data-testid="metric-container"] {
-        background-color: #F0F2F6;
-        border: 1px solid #D6D6D6;
+        background-color: #FFFFFF;
+        border: 1px solid #E0E0E0;
         padding: 15px;
-        border-radius: 8px;
-        box-shadow: 1px 1px 3px rgba(0,0,0,0.1);
-        color: #333333;
+        border-radius: 10px;
+        box-shadow: 2px 2px 5px rgba(0,0,0,0.05);
     }
     div[data-testid="metric-container"] > label {
-        font-size: 14px;
-        font-weight: 500;
-        color: #555;
+        color: #666; font-size: 14px;
     }
     div[data-testid="metric-container"] > div:nth-child(2) {
-        font-size: 26px;
-        font-weight: 700;
-        color: #0E1117;
+        color: #0068C9; font-size: 24px; font-weight: bold;
     }
-    /* Styling Header Tab */
+    /* Tab Header Style */
     .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
-        font-size: 16px;
-        font-weight: bold;
+        font-size: 16px; font-weight: 600;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -48,261 +41,238 @@ st.markdown("""
 # ==========================================
 @st.cache_data
 def load_data():
-    # Load CSV (Pastikan file ada di root folder GitHub)
     rfm = pd.read_csv('clean_rfm_segments.csv')
     trx = pd.read_csv('clean_transactions_full.csv')
     
-    # Convert DateTime
+    # Feature Engineering untuk App
     trx['DateTime'] = pd.to_datetime(trx['DateTime'])
-    
+    # Pastikan kolom sorting ada
+    if 'DayOfWeek_Sorted' not in trx.columns:
+        trx['DayOfWeek_Sorted'] = (trx['DateTime'].dt.dayofweek + 1).astype(str) + ". " + trx['DateTime'].dt.day_name()
+    if 'Hour_Sorted' not in trx.columns:
+        trx['Hour_Sorted'] = trx['DateTime'].dt.hour.astype(str).str.zfill(2) + ":00"
+        
     return rfm, trx
 
-# Error Handling Load Data
 try:
     rfm_df, trx_df = load_data()
 except FileNotFoundError:
-    st.error("⚠️ File CSV tidak ditemukan. Pastikan file 'clean_rfm_segments.csv' dan 'clean_transactions_full.csv' sudah diupload ke GitHub.")
+    st.error("⚠️ File CSV tidak ditemukan. Upload 'clean_rfm_segments.csv' & 'clean_transactions_full.csv' ke GitHub.")
     st.stop()
 
 # ==========================================
-# 3. SIDEBAR & FILTERS
+# 3. SIDEBAR NAVIGATION
 # ==========================================
 st.sidebar.image("https://cdn-icons-png.flaticon.com/512/3094/3094851.png", width=60)
-st.sidebar.title("Analytics Menu")
+st.sidebar.title("Retail Analytics Pro")
 
-# Navigasi Halaman
-page = st.sidebar.radio("Pilih Halaman:", ["Dashboard Utama", "Business Recommendations", "Dataset Info"])
+page = st.sidebar.radio("Menu Navigasi:", 
+    ["📊 Dashboard Utama", "🛠️ Marketing Action Center", "💡 Rekomendasi Bisnis", "📂 Dataset Info"]
+)
 
 st.sidebar.divider()
 
-# --- GLOBAL FILTER (Hanya aktif di Dashboard) ---
-if page == "Dashboard Utama":
-    st.sidebar.header("🎛️ Filter Data")
+# ==========================================
+# HALAMAN 1: DASHBOARD UTAMA (MONITORING)
+# ==========================================
+if page == "📊 Dashboard Utama":
     
-    # 1. Filter Segmen
-    all_segments = sorted(rfm_df['Segment'].unique())
-    selected_segments = st.sidebar.multiselect(
-        "Pilih Segmen:",
-        options=all_segments,
-        default=all_segments
-    )
+    # --- SIDEBAR FILTERS (Hanya di hal ini) ---
+    st.sidebar.header("🎛️ Filter Dashboard")
+    sel_seg = st.sidebar.multiselect("Segmen:", rfm_df['Segment'].unique(), default=rfm_df['Segment'].unique())
+    min_d, max_d = trx_df['DateTime'].min().date(), trx_df['DateTime'].max().date()
+    sel_date = st.sidebar.date_input("Tanggal:", (min_d, max_d), min_value=min_d, max_value=max_d)
     
-    # 2. Filter Tanggal
-    min_date = trx_df['DateTime'].min().date()
-    max_date = trx_df['DateTime'].max().date()
-    
-    date_range = st.sidebar.date_input(
-        "Rentang Tanggal:",
-        value=(min_date, max_date),
-        min_value=min_date,
-        max_value=max_date
-    )
-    
-    # LOGIKA FILTERING
-    if selected_segments:
-        filtered_rfm = rfm_df[rfm_df['Segment'].isin(selected_segments)]
+    # FILTER LOGIC
+    if sel_seg:
+        f_rfm = rfm_df[rfm_df['Segment'].isin(sel_seg)]
     else:
-        filtered_rfm = rfm_df # Jika kosong, ambil semua
+        f_rfm = rfm_df
         
-    # Ambil User ID yang valid dari filter segmen
-    valid_users = filtered_rfm['User_id'].unique()
+    valid_users = f_rfm['User_id'].unique()
     
-    # Filter Transaksi berdasarkan User ID & Tanggal
-    if len(date_range) == 2:
-        mask_date = (trx_df['DateTime'].dt.date >= date_range[0]) & (trx_df['DateTime'].dt.date <= date_range[1])
-        filtered_trx = trx_df[trx_df['User_id'].isin(valid_users) & mask_date]
+    if len(sel_date) == 2:
+        mask = (trx_df['DateTime'].dt.date >= sel_date[0]) & (trx_df['DateTime'].dt.date <= sel_date[1])
+        f_trx = trx_df[trx_df['User_id'].isin(valid_users) & mask]
     else:
-        filtered_trx = trx_df[trx_df['User_id'].isin(valid_users)]
+        f_trx = trx_df[trx_df['User_id'].isin(valid_users)]
 
-# ==========================================
-# 4. HALAMAN: DASHBOARD UTAMA
-# ==========================================
-if page == "Dashboard Utama":
-    st.title("🚀 Retail Business Performance")
-    st.markdown("Dashboard interaktif untuk memantau performa penjualan dan segmentasi pelanggan berbasis **RFM Analysis**.")
+    # --- MAIN CONTENT ---
+    st.title("🚀 Business Performance Monitor")
     
-    # --- BARIS 1: KPI CARDS ---
-    col1, col2, col3, col4 = st.columns(4)
+    # KPI CARDS
+    c1, c2, c3, c4 = st.columns(4)
+    rev = f_trx['Total Price'].sum()
+    trx_count = f_trx['Session_id'].nunique()
+    aov = f_trx['Total Price'].mean() if trx_count > 0 else 0
+    cust = f_rfm['User_id'].nunique()
     
-    # Hitung Metrics
-    total_revenue = filtered_trx['Total Price'].sum()
-    total_trx_count = filtered_trx['Session_id'].nunique()
-    avg_aov = filtered_trx['Total Price'].mean() if total_trx_count > 0 else 0
-    total_customers = filtered_rfm['User_id'].nunique()
-    
-    col1.metric("Total Pendapatan", f"Rp {total_revenue:,.0f}".replace(",", "."))
-    col2.metric("Total Transaksi", f"{total_trx_count:,}".replace(",", "."))
-    col3.metric("Rata-rata Order (AOV)", f"Rp {avg_aov:,.0f}".replace(",", "."))
-    col4.metric("Pelanggan Aktif", f"{total_customers:,}")
+    c1.metric("Total Revenue", f"Rp {rev:,.0f}".replace(",", "."))
+    c2.metric("Total Transaksi", f"{trx_count:,}".replace(",", "."))
+    c3.metric("Avg. Order Value", f"Rp {aov:,.0f}".replace(",", "."))
+    c4.metric("Pelanggan Aktif", f"{cust:,}")
     
     st.divider()
     
-    # --- TABS NAVIGASI (STRATEGI vs OPERASIONAL) ---
-    tab_strategic, tab_operational = st.tabs(["📈 Strategic View (Executive)", "🔍 Operational View (Detail)"])
+    tab1, tab2 = st.tabs(["📈 Strategic View", "🔍 Operational View"])
     
-    # === TAB 1: STRATEGIC ===
-    with tab_strategic:
-        c1, c2 = st.columns([1, 2])
-        
-        with c1:
-            st.subheader("Komposisi Pelanggan")
-            # Donut Chart Segmen
-            seg_counts = filtered_rfm['Segment'].value_counts().reset_index()
-            seg_counts.columns = ['Segment', 'Count']
+    with tab1:
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            st.subheader("Komposisi Segmen")
+            sc = f_rfm['Segment'].value_counts().reset_index()
+            sc.columns = ['Segment', 'Count']
+            fig = px.pie(sc, values='Count', names='Segment', hole=0.4, color_discrete_sequence=px.colors.qualitative.Prism)
+            fig.update_traces(textinfo='percent+label', textposition='inside')
+            fig.update_layout(showlegend=False, margin=dict(t=20, b=0, l=0, r=0))
+            st.plotly_chart(fig, use_container_width=True)
             
-            fig_donut = px.pie(seg_counts, values='Count', names='Segment', hole=0.45,
-                               color_discrete_sequence=px.colors.qualitative.Prism)
-            fig_donut.update_traces(textinfo='percent+label', textposition='inside')
-            fig_donut.update_layout(showlegend=False, margin=dict(t=30, b=0, l=0, r=0))
-            st.plotly_chart(fig_donut, use_container_width=True)
-            
-            # Insight Box
-            if not seg_counts.empty:
-                top_seg = seg_counts.iloc[0]['Segment']
-                st.info(f"💡 **Insight:** Mayoritas pelanggan berada di segmen **{top_seg}**. Gunakan strategi retensi yang sesuai.")
-
-        with c2:
-            st.subheader("Tren Pendapatan Harian")
-            # Line Chart
-            if not filtered_trx.empty:
-                trend_df = filtered_trx.set_index('DateTime').resample('D')['Total Price'].sum().reset_index()
-                fig_line = px.line(trend_df, x='DateTime', y='Total Price', markers=True,
-                                   line_shape='spline', color_discrete_sequence=['#0068C9'])
-                fig_line.update_layout(xaxis_title="", yaxis_title="Revenue (Rp)", margin=dict(t=20, b=20))
-                st.plotly_chart(fig_line, use_container_width=True)
+        with col2:
+            st.subheader("Heatmap Waktu Transaksi")
+            if not f_trx.empty:
+                hm = f_trx.groupby(['DayOfWeek_Sorted', 'Hour_Sorted']).size().reset_index(name='Count')
+                fig_h = px.density_heatmap(hm, x='Hour_Sorted', y='DayOfWeek_Sorted', z='Count', color_continuous_scale='Blues')
+                fig_h.update_xaxes(categoryorder='category ascending', title="Jam")
+                fig_h.update_yaxes(categoryorder='category ascending', title="Hari")
+                st.plotly_chart(fig_h, use_container_width=True)
             else:
-                st.warning("Data transaksi kosong.")
+                st.info("No Data")
 
-        # --- HEATMAP SECTION (FIXED SORTING) ---
-        st.subheader("🔥 Heatmap Waktu Transaksi (Optimasi Jam Sibuk)")
+    with tab2:
+        c_left, c_right = st.columns(2)
+        with c_left:
+            st.subheader("Top 5 Produk (Revenue)")
+            if not f_trx.empty:
+                tp = f_trx.groupby('SubCategory')['Total Price'].sum().sort_values(ascending=False).head(5).reset_index()
+                fig_b = px.bar(tp, x='Total Price', y='SubCategory', orientation='h', text_auto='.2s', color='Total Price', color_continuous_scale='Blues')
+                fig_b.update_layout(yaxis={'categoryorder':'total ascending'})
+                st.plotly_chart(fig_b, use_container_width=True)
         
-        if not filtered_trx.empty:
-            # Agregasi Data
-            heatmap_data = filtered_trx.groupby(['DayOfWeek_Sorted', 'Hour_Sorted']).size().reset_index(name='Count')
-            
-            # FIX: Memaksa Plotly mengurutkan berdasarkan Kategori (Abjad/Angka)
-            # Karena data kita formatnya "1. Monday", "2. Tuesday", maka sort category ascending akan berhasil
-            fig_heat = px.density_heatmap(
-                heatmap_data, 
-                x='Hour_Sorted', 
-                y='DayOfWeek_Sorted', 
-                z='Count',
-                color_continuous_scale='Blues',
-                text_auto=True
-            )
-            
-            # UPDATE LAYOUT UNTUK SORTING YANG BENAR
-            fig_heat.update_xaxes(categoryorder='category ascending', title="Jam Transaksi")
-            fig_heat.update_yaxes(categoryorder='category ascending', title="Hari")
-            
-            st.plotly_chart(fig_heat, use_container_width=True)
-            st.caption("Grafik ini menunjukkan kepadatan transaksi. Warna makin gelap = Makin sibuk.")
+        with c_right:
+            st.subheader("Sebaran Pelanggan (Scatter)")
+            if not f_rfm.empty:
+                fig_s = px.scatter(f_rfm, x="Frequency", y="Monetary", color="Segment", hover_name="User_id", size="Monetary", log_x=True, log_y=True)
+                st.plotly_chart(fig_s, use_container_width=True)
+
+        st.subheader("📋 Daftar Detail Pelanggan")
+        if not f_rfm.empty:
+            df_d = f_rfm[['User_id', 'Segment', 'Recency', 'Frequency', 'Monetary']].copy()
+            df_d.columns = ['User ID', 'Segmen', 'Hari Terakhir', 'Total Transaksi', 'Total Belanja (Rp)']
+            df_d = df_d.sort_values('Total Belanja (Rp)', ascending=False)
+            max_val = int(df_d['Total Transaksi'].max())
+            st.dataframe(df_d, column_config={
+                "Total Belanja (Rp)": st.column_config.NumberColumn(format="Rp %d"),
+                "Total Transaksi": st.column_config.ProgressColumn(format="%d", min_value=0, max_value=max_val)
+            }, use_container_width=True, hide_index=True)
+
+# ==========================================
+# HALAMAN 2: MARKETING ACTION CENTER (NEW!)
+# ==========================================
+elif page == "🛠️ Marketing Action Center":
+    st.title("🛠️ Marketing Action Center")
+    st.markdown("Tools taktis untuk tim Sales & Marketing melakukan eksekusi kampanye.")
+
+    # --- FITUR 1: PRODUCT ANALYZER ---
+    st.markdown("---")
+    st.header("1️⃣ Product Deep Dive")
+    st.caption("Analisis performa spesifik per produk untuk menentukan waktu promo terbaik.")
+    
+    col_sel, col_stat = st.columns([1, 3])
+    
+    with col_sel:
+        # Dropdown pilih produk
+        all_prods = sorted(trx_df['SubCategory'].unique())
+        selected_prod = st.selectbox("Pilih Produk / Kategori:", all_prods)
+    
+    # Filter data by product
+    prod_trx = trx_df[trx_df['SubCategory'] == selected_prod]
+    
+    with col_stat:
+        # Mini KPI Produk
+        rev_p = prod_trx['Total Price'].sum()
+        qty_p = prod_trx['Quantity'].sum()
+        k1, k2, k3 = st.columns(3)
+        k1.metric(f"Revenue: {selected_prod}", f"Rp {rev_p:,.0f}".replace(",", "."))
+        k2.metric("Terjual (Qty)", f"{qty_p:,.0f}")
+    
+    # Visualisasi Produk
+    c1, c2 = st.columns(2)
+    
+    with c1:
+        st.subheader(f"Kapan {selected_prod} Laris?")
+        # Heatmap KHUSUS Produk ini
+        if not prod_trx.empty:
+            hm_prod = prod_trx.groupby(['DayOfWeek_Sorted', 'Hour_Sorted']).size().reset_index(name='Count')
+            fig_hm_p = px.density_heatmap(hm_prod, x='Hour_Sorted', y='DayOfWeek_Sorted', z='Count', 
+                                          color_continuous_scale='Oranges', title=f"Heatmap Penjualan: {selected_prod}")
+            fig_hm_p.update_xaxes(categoryorder='category ascending')
+            fig_hm_p.update_yaxes(categoryorder='category ascending')
+            st.plotly_chart(fig_hm_p, use_container_width=True)
+            st.info(f"💡 Gunakan Heatmap ini untuk menentukan kapan Flash Sale **{selected_prod}**.")
         else:
-            st.info("Tidak ada data untuk ditampilkan.")
+            st.warning("Data tidak cukup.")
+            
+    with c2:
+        st.subheader("Siapa Pembelinya?")
+        # Ambil User ID pembeli produk ini, lalu cek segmennya di RFM
+        buyer_ids = prod_trx['User_id'].unique()
+        buyer_rfm = rfm_df[rfm_df['User_id'].isin(buyer_ids)]
+        
+        seg_buy = buyer_rfm['Segment'].value_counts().reset_index()
+        seg_buy.columns = ['Segment', 'Count']
+        fig_p_seg = px.bar(seg_buy, x='Count', y='Segment', orientation='h', color='Count', title=f"Segmen Pembeli {selected_prod}")
+        st.plotly_chart(fig_p_seg, use_container_width=True)
 
-    # === TAB 2: OPERATIONAL ===
-    with tab_operational:
-        # KPI Tambahan
-        kpi1, kpi2, kpi3 = st.columns(3)
-        max_sale = filtered_trx['Total Price'].max() if not filtered_trx.empty else 0
-        total_qty = filtered_trx['Quantity'].sum() if not filtered_trx.empty else 0
+    # --- FITUR 2: TARGET AUDIENCE GENERATOR ---
+    st.markdown("---")
+    st.header("2️⃣ Campaign Target Generator")
+    st.caption("Filter user spesifik untuk di-download dan diserahkan ke tim CS/Sales.")
+    
+    col_f1, col_f2, col_f3 = st.columns(3)
+    
+    with col_f1:
+        target_seg = st.multiselect("Target Segmen:", rfm_df['Segment'].unique(), default=["At Risk"])
+    with col_f2:
+        min_recency = st.number_input("Minimal Hari Tidak Belanja (Recency):", min_value=0, value=30)
+    with col_f3:
+        min_monetary = st.number_input("Minimal Total Belanja (Rp):", min_value=0, value=50000)
         
-        kpi1.metric("Rekor Penjualan Tertinggi", f"Rp {max_sale:,.0f}".replace(",", "."))
-        kpi2.metric("Total Produk Terjual", f"{total_qty:,.0f}".replace(",", "."))
-        
-        st.markdown("---")
-        
-        col_left, col_right = st.columns(2)
-        
-        with col_left:
-            st.subheader("🏆 Top 5 Kategori Produk")
-            if not filtered_trx.empty:
-                top_prod = filtered_trx.groupby('SubCategory')['Total Price'].sum().sort_values(ascending=False).head(5).reset_index()
-                fig_bar = px.bar(top_prod, x='Total Price', y='SubCategory', orientation='h',
-                                 text_auto='.2s', color='Total Price', color_continuous_scale='Blues')
-                fig_bar.update_layout(yaxis={'categoryorder':'total ascending'})
-                st.plotly_chart(fig_bar, use_container_width=True)
-            else:
-                st.warning("Data kosong.")
-        
-        with col_right:
-            st.subheader("📍 Peta Sebaran (Scatter)")
-            if not filtered_rfm.empty:
-                fig_scatter = px.scatter(filtered_rfm, x="Frequency", y="Monetary", color="Segment",
-                                         hover_name="User_id", size="Monetary", log_x=True, log_y=True,
-                                         color_discrete_sequence=px.colors.qualitative.Safe)
-                st.plotly_chart(fig_scatter, use_container_width=True)
-            else:
-                st.warning("Data kosong.")
-        
-        # TABEL DETAIL PELANGGAN
-        st.subheader("📋 Daftar Pelanggan Prioritas")
-        if not filtered_rfm.empty:
-            df_display = filtered_rfm[['User_id', 'Segment', 'Recency', 'Frequency', 'Monetary']].copy()
-            # PERBAIKAN DI SINI: 'Total Transaksi' harus konsisten
-            df_display.columns = ['User ID', 'Segmen', 'Hari Terakhir', 'Total Transaksi', 'Total Belanja (Rp)']
-            df_display = df_display.sort_values(by='Total Belanja (Rp)', ascending=False)
-            
-            # Fix JSON Error dengan convert ke int
-            # Pastikan kita memanggil nama kolom yang benar 'Total Transaksi'
-            max_val = int(df_display['Total Transaksi'].max())
-            
-            st.dataframe(
-                df_display,
-                column_config={
-                    "Total Belanja (Rp)": st.column_config.NumberColumn(format="Rp %d"),
-                    "Total Transaksi": st.column_config.ProgressColumn(format="%d", min_value=0, max_value=max_val)
-                },
-                use_container_width=True,
-                hide_index=True
-            )
+    # Logic Filter
+    target_list = rfm_df[
+        (rfm_df['Segment'].isin(target_seg)) & 
+        (rfm_df['Recency'] >= min_recency) &
+        (rfm_df['Monetary'] >= min_monetary)
+    ]
+    
+    st.success(f"🎯 Ditemukan **{len(target_list)} Pelanggan** yang cocok dengan kriteria.")
+    
+    st.dataframe(target_list[['User_id', 'Segment', 'Recency', 'Monetary', 'Frequency']], use_container_width=True)
+    
+    # Download Button
+    csv = target_list.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="📥 Download Data Target (CSV)",
+        data=csv,
+        file_name='campaign_target_list.csv',
+        mime='text/csv',
+    )
 
 # ==========================================
-# 5. HALAMAN: BUSINESS RECOMMENDATIONS
+# HALAMAN 3: BUSINESS RECOMMENDATIONS
 # ==========================================
-elif page == "Business Recommendations":
+elif page == "💡 Rekomendasi Bisnis":
     st.title("💡 Rekomendasi Strategis")
-    st.markdown("Berdasarkan analisis data, berikut adalah **Action Plan** yang direkomendasikan:")
-    
-    # Menggunakan Expander agar rapi
-    with st.expander("🏆 Strategi untuk 'Champions' (High Value)", expanded=True):
-        st.write("""
-        **Karakteristik:** Loyal, sering belanja, uang banyak.
-        - **Action:** Berikan akses *Pre-order* eksklusif untuk produk Gadget/Aksesoris terbaru.
-        - **Goal:** Menjaga rasa eksklusivitas dan meningkatkan *Wallet Share*.
-        """)
-        
-    with st.expander("⚠️ Strategi untuk 'At Risk' (Berisiko Churn)", expanded=True):
-        st.write("""
-        **Karakteristik:** Dulu aktif, sekarang sudah lama menghilang.
-        - **Action:** Kirim 'Win-Back Voucher' pada jam sibuk (Kamis Siang) sesuai Heatmap.
-        - **Goal:** Mengaktifkan kembali sebelum mereka menjadi *Lost Customer*.
-        """)
-        
-    with st.expander("🌱 Strategi untuk 'New Customers'", expanded=True):
-        st.write("""
-        **Karakteristik:** Baru belanja 1x.
-        - **Action:** Tawarkan paket *Bundling* (Beli 2 Lebih Hemat).
-        - **Goal:** Meningkatkan frekuensi belanja dari 1 menjadi 2 (agar jadi Loyal).
-        """)
+    with st.expander("🏆 Strategi Champions", expanded=True):
+        st.write("**Action:** Berikan akses *Pre-order* eksklusif Gadget. **Goal:** Jaga Eksklusivitas.")
+    with st.expander("⚠️ Strategi At Risk", expanded=True):
+        st.write("**Action:** Kirim Voucher pada jam sibuk sesuai Heatmap. **Goal:** Win-Back Campaign.")
+    with st.expander("🌱 Strategi New Customers", expanded=True):
+        st.write("**Action:** Tawarkan Bundling Beli 2 Hemat. **Goal:** Tingkatkan Frekuensi.")
 
 # ==========================================
-# 6. HALAMAN: DATASET INFO
+# HALAMAN 4: DATASET INFO
 # ==========================================
-elif page == "Dataset Info":
+elif page == "📂 Dataset Info":
     st.title("📂 Informasi Dataset")
-    st.markdown("Penjelasan mengenai sumber data dan kamus data yang digunakan dalam proyek ini.")
-    
-    st.markdown("""
-    ### **Data Dictionary**
-    | Nama Kolom | Penjelasan |
-    | :--- | :--- |
-    | **User_id** | Identitas unik pelanggan. |
-    | **Session_id** | Kode unik setiap transaksi. |
-    | **DateTime** | Waktu transaksi terjadi. |
-    | **Action** | Jenis aktivitas (Purchase, View, dll). |
-    | **Total Price** | Nilai total belanja (Revenue). |
-    """)
-    
-    st.markdown("### **Preview Data Transaksi**")
-    st.dataframe(trx_df.head(10))
+    st.markdown("Sumber Data: E-Commerce Retail Transaction 2019.")
+    st.dataframe(trx_df.head())
