@@ -17,8 +17,8 @@ Data diproses untuk mengidentifikasi pelanggan setia (Champions) dan berisiko (A
 @st.cache_data
 def load_data():
     # Pastikan path sesuai dengan struktur foldermu
-    rfm = pd.read_csv('data/clean_rfm_segments.csv')
-    trx = pd.read_csv('data/clean_transactions_full.csv')
+    rfm = pd.read_csv('clean_rfm_segments.csv')
+    trx = pd.read_csv('clean_transactions_full.csv')
     return rfm, trx
 
 try:
@@ -85,4 +85,5 @@ st.download_button(
     data=csv,
     file_name='filtered_rfm_data.csv',
     mime='text/csv',
+
 )
