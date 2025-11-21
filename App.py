@@ -239,10 +239,12 @@ if page == "Dashboard Utama":
         st.subheader("📋 Daftar Pelanggan Prioritas")
         if not filtered_rfm.empty:
             df_display = filtered_rfm[['User_id', 'Segment', 'Recency', 'Frequency', 'Monetary']].copy()
-            df_display.columns = ['User ID', 'Segmen', 'Hari Terakhir', 'Transaksi', 'Total Belanja (Rp)']
+            # PERBAIKAN DI SINI: 'Total Transaksi' harus konsisten
+            df_display.columns = ['User ID', 'Segmen', 'Hari Terakhir', 'Total Transaksi', 'Total Belanja (Rp)']
             df_display = df_display.sort_values(by='Total Belanja (Rp)', ascending=False)
             
             # Fix JSON Error dengan convert ke int
+            # Pastikan kita memanggil nama kolom yang benar 'Total Transaksi'
             max_val = int(df_display['Total Transaksi'].max())
             
             st.dataframe(
