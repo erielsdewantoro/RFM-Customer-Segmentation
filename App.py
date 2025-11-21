@@ -3,87 +3,262 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-# --- KONFIGURASI HALAMAN ---
-st.set_page_config(page_title="RFM Dashboard", layout="wide")
+# ==========================================
+# 1. CONFIGURATION & CUSTOM CSS (THEMING)
+# ==========================================
+st.set_page_config(
+    page_title="Retail Analytics Dashboard",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# --- TITLE & INTRO ---
-st.title("📊 RFM Customer Segmentation Dashboard")
+# Custom CSS untuk tampilan yang lebih 'Clean' & 'Card-like'
 st.markdown("""
-Aplikasi ini memvisualisasikan hasil analisis segmentasi pelanggan ritel menggunakan metode RFM.
-Data diproses untuk mengidentifikasi pelanggan setia (Champions) dan berisiko (At Risk).
-""")
+<style>
+    /* Mengubah background metric card */
+    div[data-testid="metric-container"] {
+        background-color: #FFFFFF;
+        border: 1px solid #E0E0E0;
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 2px 2px 5px rgba(0,0,0,0.05);
+        color: #333333;
+    }
+    /* Judul metric lebih kecil dan abu-abu */
+    div[data-testid="metric-container"] > label {
+        font-size: 14px;
+        color: #666666;
+    }
+    /* Angka metric lebih besar dan tebal */
+    div[data-testid="metric-container"] > div:nth-child(2) {
+        font-size: 24px;
+        font-weight: bold;
+        color: #0068C9; /* Warna Biru Streamlit Professional */
+    }
+    /* Hapus padding atas default agar header lebih naik */
+    .block-container {
+        padding-top: 2rem;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-# --- LOAD DATA ---
+# ==========================================
+# 2. DATA LOADING & PREPROCESSING
+# ==========================================
 @st.cache_data
 def load_data():
-    # Pastikan path sesuai dengan struktur foldermu
+    # Load data (Pastikan file ada di root folder GitHub)
     rfm = pd.read_csv('clean_rfm_segments.csv')
     trx = pd.read_csv('clean_transactions_full.csv')
+    
+    # Convert DateTime
+    trx['DateTime'] = pd.to_datetime(trx['DateTime'])
+    
     return rfm, trx
 
+# Load Data dengan Error Handling
 try:
     rfm_df, trx_df = load_data()
 except FileNotFoundError:
-    st.error("File CSV tidak ditemukan. Pastikan file ada di folder 'data/'.")
+    st.error("⚠️ File CSV tidak ditemukan. Pastikan 'clean_rfm_segments.csv' dan 'clean_transactions_full.csv' ada di repository.")
     st.stop()
 
-# --- SIDEBAR FILTER ---
-st.sidebar.header("Filter Data")
-selected_segment = st.sidebar.multiselect(
-    "Pilih Segmen:",
-    options=rfm_df['Segment'].unique(),
-    default=rfm_df['Segment'].unique()
-)
+# ==========================================
+# 3. SIDEBAR (NAVIGASI & FILTER)
+# ==========================================
+st.sidebar.image("https://cdn-icons-png.flaticon.com/512/3094/3094851.png", width=50) # Icon Dummy
+st.sidebar.title("Navigation")
 
-# Filter Dataframe berdasarkan input user
-filtered_rfm = rfm_df[rfm_df['Segment'].isin(selected_segment)]
+# Menu Pilihan Halaman
+page = st.sidebar.radio("Go to", ["Dashboard Utama", "Dataset Source", "About Project"])
 
-# --- BARIS 1: KPI METRICS ---
-st.header("Executive Summary")
-col1, col2, col3 = st.columns(3)
+st.sidebar.divider()
 
-total_revenue = trx_df['Total Price'].sum()
-total_trx = trx_df['Session_id'].nunique()
-total_customer = rfm_df['User_id'].nunique()
-
-col1.metric("Total Revenue", f"Rp {total_revenue:,.0f}")
-col2.metric("Total Transaksi", f"{total_trx}")
-col3.metric("Total Pelanggan", f"{total_customer}")
-
-st.divider()
-
-# --- BARIS 2: VISUALISASI UTAMA ---
-col_left, col_right = st.columns(2)
-
-with col_left:
-    st.subheader("Komposisi Segmen Pelanggan")
-    segment_counts = filtered_rfm['Segment'].value_counts().reset_index()
-    segment_counts.columns = ['Segment', 'Count']
+# Global Filter (Hanya muncul di halaman Dashboard)
+if page == "Dashboard Utama":
+    st.sidebar.header("🎛️ Filter Options")
     
-    fig_pie = px.pie(segment_counts, values='Count', names='Segment', 
-                     color_discrete_sequence=px.colors.qualitative.Pastel)
-    st.plotly_chart(fig_pie, use_container_width=True)
+    # Filter Segmen
+    selected_segments = st.sidebar.multiselect(
+        "Pilih Segmen Customer:",
+        options=rfm_df['Segment'].unique(),
+        default=rfm_df['Segment'].unique()
+    )
+    
+    # Filter Date Range
+    min_date = trx_df['DateTime'].min().date()
+    max_date = trx_df['DateTime'].max().date()
+    
+    date_range = st.sidebar.date_input(
+        "Rentang Tanggal Transaksi:",
+        value=(min_date, max_date),
+        min_value=min_date,
+        max_value=max_date
+    )
+    
+    # Terapkan Filter
+    # 1. Filter RFM Data
+    filtered_rfm = rfm_df[rfm_df['Segment'].isin(selected_segments)]
+    
+    # 2. Filter Transaction Data
+    # Ambil User ID yang terpilih di filter segmen
+    valid_users = filtered_rfm['User_id'].unique()
+    
+    # Filter TRX berdasarkan User ID valid DAN Date Range
+    mask_date = (trx_df['DateTime'].dt.date >= date_range[0]) & (trx_df['DateTime'].dt.date <= date_range[1])
+    filtered_trx = trx_df[trx_df['User_id'].isin(valid_users) & mask_date]
 
-with col_right:
-    st.subheader("Scatter Plot: Frequency vs Monetary")
-    # Scatter plot untuk validasi segmen (seperti di Power BI Hal 2)
-    fig_scatter = px.scatter(filtered_rfm, x="Frequency", y="Monetary", 
-                             color="Segment", hover_data=['User_id'],
-                             log_x=True, log_y=True, # Skala Log agar titik tidak menumpuk
-                             title="Sebaran Pelanggan (Log Scale)")
-    st.plotly_chart(fig_scatter, use_container_width=True)
+# ==========================================
+# 4. MAIN PAGE CONTENT
+# ==========================================
 
-# --- BARIS 3: TABEL DETAIL ---
-st.subheader(f"Daftar Pelanggan ({len(filtered_rfm)} User)")
-st.dataframe(filtered_rfm[['User_id', 'Segment', 'Recency', 'Frequency', 'Monetary']]
-             .sort_values(by='Monetary', ascending=False))
+if page == "Dashboard Utama":
+    st.title("🚀 Retail Business Performance Dashboard")
+    st.markdown("### Monitoring Kesehatan Bisnis & Perilaku Pelanggan Berbasis RFM")
+    
+    # --- ROW 1: KPI CARDS ---
+    col1, col2, col3, col4 = st.columns(4)
+    
+    total_rev = filtered_trx['Total Price'].sum()
+    total_trx = filtered_trx['Session_id'].nunique()
+    avg_order = filtered_trx['Total Price'].mean() if total_trx > 0 else 0
+    active_customers = filtered_rfm['User_id'].nunique()
+    
+    col1.metric("Total Revenue", f"Rp {total_rev:,.0f}".replace(",", "."))
+    col2.metric("Total Transaksi", f"{total_trx:,}".replace(",", "."))
+    col3.metric("Avg. Order Value", f"Rp {avg_order:,.0f}".replace(",", "."))
+    col4.metric("Active Customers", f"{active_customers:,}")
+    
+    st.divider()
+    
+    # --- TABS LAYOUT (STRATEGY vs OPERATION) ---
+    tab1, tab2 = st.tabs(["📈 Executive Summary (Strategic)", "🔍 Customer Deep Dive (Operational)"])
+    
+    # === TAB 1: EXECUTIVE VIEW ===
+    with tab1:
+        c1, c2 = st.columns([1, 2]) # Kolom kiri kecil, kanan besar
+        
+        with c1:
+            st.subheader("Komposisi Segmen")
+            # Donut Chart
+            seg_counts = filtered_rfm['Segment'].value_counts().reset_index()
+            seg_counts.columns = ['Segment', 'Count']
+            
+            fig_donut = px.pie(seg_counts, values='Count', names='Segment', hole=0.4,
+                               color_discrete_sequence=px.colors.qualitative.Prism)
+            fig_donut.update_layout(legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5))
+            st.plotly_chart(fig_donut, use_container_width=True)
+            
+            # Insight Box
+            top_segment = seg_counts.iloc[0]['Segment']
+            st.info(f"💡 **Insight:** Segmen dominan saat ini adalah **{top_segment}**. Pastikan strategi retensi fokus pada konversi segmen ini.")
 
-# --- DOWNLOAD BUTTON ---
-csv = filtered_rfm.to_csv(index=False).encode('utf-8')
-st.download_button(
-    label="Download Filtered Data (CSV)",
-    data=csv,
-    file_name='filtered_rfm_data.csv',
-    mime='text/csv',
+        with c2:
+            st.subheader("Tren Pendapatan (Revenue Trend)")
+            # Line Chart Bulanan
+            # Resample ke Bulanan/Harian
+            trend_df = filtered_trx.set_index('DateTime').resample('D')['Total Price'].sum().reset_index()
+            
+            fig_line = px.line(trend_df, x='DateTime', y='Total Price', 
+                               markers=True, line_shape='spline',
+                               color_discrete_sequence=['#0068C9'])
+            fig_line.update_layout(xaxis_title="Tanggal", yaxis_title="Revenue (Rp)")
+            st.plotly_chart(fig_line, use_container_width=True)
+        
+        # Heatmap Section (Full Width)
+        st.subheader("🔥 Peta Waktu Transaksi (Heatmap)")
+        
+        # Agregasi untuk Heatmap
+        heatmap_data = filtered_trx.groupby(['DayOfWeek_Sorted', 'Hour_Sorted']).size().reset_index(name='Count')
+        
+        fig_heat = px.density_heatmap(heatmap_data, x='Hour_Sorted', y='DayOfWeek_Sorted', z='Count',
+                                      color_continuous_scale='Blues', text_auto=True)
+        fig_heat.update_layout(xaxis_title="Jam", yaxis_title="Hari")
+        st.plotly_chart(fig_heat, use_container_width=True)
 
-)
+    # === TAB 2: OPERATIONAL VIEW ===
+    with tab2:
+        col_left, col_right = st.columns(2)
+        
+        with col_left:
+            st.subheader("Top 5 Kategori Produk (Revenue)")
+            # Bar Chart Horizontal
+            top_products = filtered_trx.groupby('SubCategory')['Total Price'].sum().sort_values(ascending=False).head(5).reset_index()
+            
+            fig_bar = px.bar(top_products, x='Total Price', y='SubCategory', orientation='h',
+                             text_auto='.2s', color='Total Price', color_continuous_scale='Blues')
+            fig_bar.update_layout(yaxis={'categoryorder':'total ascending'})
+            st.plotly_chart(fig_bar, use_container_width=True)
+            
+        with col_right:
+            st.subheader("Peta Sebaran Pelanggan (Scatter)")
+            # Scatter Plot
+            fig_scatter = px.scatter(filtered_rfm, x="Frequency", y="Monetary", 
+                                     color="Segment", size='Monetary', hover_name="User_id",
+                                     log_x=True, log_y=True, 
+                                     color_discrete_sequence=px.colors.qualitative.Safe)
+            st.plotly_chart(fig_scatter, use_container_width=True)
+            
+        # Tabel Detail
+        st.subheader("📋 Daftar Detail Pelanggan")
+        
+        # Format Tabel untuk display
+        display_df = filtered_rfm[['User_id', 'Segment', 'Recency', 'Frequency', 'Monetary']].copy()
+        display_df.columns = ['User ID', 'Segmen', 'Hari Terakhir Belanja', 'Total Transaksi', 'Total Belanja (Rp)']
+        
+        # Sort by Monetary
+        display_df = display_df.sort_values(by='Total Belanja (Rp)', ascending=False)
+        
+        st.dataframe(
+            display_df,
+            column_config={
+                "Total Belanja (Rp)": st.column_config.NumberColumn(format="Rp %d"), # Format Rupiah
+                "Total Transaksi": st.column_config.ProgressColumn(format="%f", min_value=0, max_value=display_df['Total Transaksi'].max()) # Data Bar visual
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+
+elif page == "Dataset Source":
+    st.title("📂 Data Source & Dictionary")
+    
+    st.markdown("""
+    **Sumber Data:** E-Commerce Retail Transaction Dataset (2019).
+    
+    **Kamus Data (Data Dictionary):**
+    | Kolom | Deskripsi |
+    | :--- | :--- |
+    | **User_id** | Identitas unik pelanggan. |
+    | **Segment** | Hasil klasifikasi RFM (Champions, Loyal, At Risk, dll). |
+    | **Recency** | Jumlah hari sejak pembelian terakhir. |
+    | **Frequency** | Total jumlah transaksi yang dilakukan. |
+    | **Monetary** | Total uang yang dibelanjakan (Revenue). |
+    """)
+    
+    st.subheader("Sample Data RFM")
+    st.dataframe(rfm_df.head(10), use_container_width=True)
+    
+    st.subheader("Sample Data Transaksi")
+    st.dataframe(trx_df.head(10), use_container_width=True)
+
+elif page == "About Project":
+    st.title("ℹ️ Tentang Proyek Ini")
+    
+    st.markdown("""
+    ### **Background**
+    Perusahaan ritel memiliki data transaksi historis namun belum memanfaatkannya secara optimal. 
+    Strategi pemasaran saat ini bersifat *generic*, sehingga tingkat retensi pelanggan rendah.
+    
+    ### **Solution**
+    Dashboard ini dibangun menggunakan pendekatan **RFM Analysis (Recency, Frequency, Monetary)** untuk melakukan segmentasi pelanggan.
+    
+    ### **Technology Stack**
+    - **Python**: Data Cleaning, EDA, RFM Modeling.
+    - **Pandas**: Data Manipulation.
+    - **Streamlit**: Interactive Web App.
+    - **Plotly**: Advanced Visualization.
+    
+    ---
+    *Created by [Nama Kamu] - Data Analyst Student*
+    """)
