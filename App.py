@@ -294,5 +294,6 @@ elif page == "About Project":
     - **Plotly**: Advanced Visualization.
     
     ---
-    *Created by [Nama Kamu] - Data Analyst Student*
+    *Created by [Eriel Setiawan Dewantoro] - Data Analyst Student*
     """)
+
